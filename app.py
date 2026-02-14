@@ -10,29 +10,7 @@ import time
 #if user:
 #    st.write("Logged in as:", user.email)
 # --- 1. SETUP & AUTHENTICATION ---
-def check_password():
-    if "general" not in st.secrets:
-        return True 
 
-    def password_entered():
-        if st.session_state["password"] == st.secrets["general"]["password"]:
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]
-        else:
-            st.session_state["password_correct"] = False
-
-    if "password_correct" not in st.session_state:
-        st.text_input("סיסמה", type="password", on_change=password_entered, key="password")
-        return False
-    elif not st.session_state["password_correct"]:
-        st.text_input("סיסמה", type="password", on_change=password_entered, key="password")
-        st.error("😕 סיסמה שגויה")
-        return False
-    else:
-        return True
-
-if not check_password():
-    st.stop()
 
 # --- 2. GOOGLE SHEETS CONNECTION ---
 @st.cache_resource
@@ -80,7 +58,8 @@ def get_liars_from_sheet():
         sheet = client.open("piniti").get_worksheet(1)
         data = sheet.get_all_records()
         return pd.DataFrame(data)
-    except Exception:
+    except Exception as e:
+        st.error(f"שגיאה בקריאת רשימת השקרנים: {e}") # Show the actual error
         return pd.DataFrame()
 
 # --- 3. DATA CONSTANTS & STATE ---
@@ -260,3 +239,8 @@ if st.toggle("🚨 הצג את רשימת השקרנים 🚨"):
     st.markdown("<h4 style='color:red;'>🤥 רשימת השקרנים</h4>", unsafe_allow_html=True)
     
     liars_df = get_liars_from_sheet()
+    if not liars_df.empty:
+            st.dataframe(liars_df, use_container_width=True)
+    else:
+            st.success("כולם צדיקים! אין שקרנים בינתיים. 😇")
+st.markdown("</div>", unsafe_allow_html=True)
