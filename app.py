@@ -5,12 +5,12 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import pytz
+import time
 
-# --- 1. SETUP & AUTHENTICATION (Simple Password) ---
-# Since you want to "leave the complex auth for now", we use the simple password check.
+# --- 1. SETUP & AUTHENTICATION ---
 def check_password():
     if "general" not in st.secrets:
-        return True # If no secrets set, allow access (for dev)
+        return True 
 
     def password_entered():
         if st.session_state["password"] == st.secrets["general"]["password"]:
@@ -35,20 +35,36 @@ if not check_password():
 # --- 2. GOOGLE SHEETS CONNECTION ---
 @st.cache_resource
 def get_gsheet_client():
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+    scope = [
+        'https://www.googleapis.com/auth/spreadsheets', 
+        'https://www.googleapis.com/auth/drive'
+    ]
     creds_dict = dict(st.secrets["gcp_service_account"])
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
     return client
 
-def save_to_google_sheet(timestamp, level, abs_level, volume):
+def save_to_google_sheet(timestamp, day_of_week, name, activity):
     try:
         client = get_gsheet_client()
+        # .sheet1 always targets the first tab
         sheet = client.open("piniti").sheet1
-        sheet.append_row([str(timestamp), level, abs_level, volume])
+        sheet.insert_row([str(timestamp), day_of_week, name, activity], index=2, value_input_option='USER_ENTERED')
         return True
     except Exception as e:
         st.error(f"שגיאה בשמירה: {e}")
+        return False
+
+# NEW FUNCTION: Save to the Liars Sheet (Tab 2)
+def save_liar_to_google_sheet(timestamp, day_of_week, name, activity):
+    try:
+        client = get_gsheet_client()
+        # .get_worksheet(1) targets the SECOND tab from the left, regardless of its name
+        sheet = client.open("piniti").get_worksheet(1)
+        sheet.insert_row([str(timestamp), day_of_week, name, activity], index=2, value_input_option='USER_ENTERED')
+        return True
+    except Exception:
+        # We don't want a liar-saving error to crash the main app, so we pass quietly
         return False
 
 def get_data_from_sheet():
@@ -60,145 +76,182 @@ def get_data_from_sheet():
     except Exception:
         return pd.DataFrame()
 
-# --- 3. DATA CONSTANTS ---
-HEIGHT_VOLUME = { 
-    0.0: 0, 0.5: 4027, 1.0: 11655, 1.5: 27344, 2.0: 53448, 2.5: 88216,
-    3.0: 126617, 3.5: 166744, 4.0: 208327, 4.5: 251136, 5.0: 295066,
-    5.5: 340074, 6.0: 386135, 6.5: 433278, 7.0: 481569, 7.5: 531074,
-    8.0: 581888, 8.5: 634177,
-}
-SEA_LEVEL_ZERO = 50.0
-MAX_RELATIVE_HEIGHT = 8.5
-MAX_ABSOLUTE_HEIGHT = SEA_LEVEL_ZERO + MAX_RELATIVE_HEIGHT
+# NEW FUNCTION: Read from the Liars Sheet (Tab 2)
+def get_liars_from_sheet():
+    try:
+        client = get_gsheet_client()
+        sheet = client.open("piniti").get_worksheet(1)
+        data = sheet.get_all_records()
+        return pd.DataFrame(data)
+    except Exception:
+        return pd.DataFrame()
+
+# --- 3. DATA CONSTANTS & STATE ---
+NAMES = ["YAFA", "SHIFSHUF", "LAKERD", "GAMAD", "GAMAL"]
+ACTIVITIES = ["פינוי מדיח"] 
+HEBREW_DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"]
+
+if 'is_saving' not in st.session_state:
+    st.session_state.is_saving = False
+
+def trigger_save():
+    st.session_state.is_saving = True
 
 # --- 4. UI START ---
 st.markdown(
-    "<h4 style='margin-bottom:0.25rem; white-space:nowrap; text-align:right; direction:rtl;'>💧 מאגר בית שערים</h4>",
+    "<h2 style='text-align:right; direction:rtl;'>🏠 ניהול מטלות הבית</h2>",
     unsafe_allow_html=True,
 )
 
-# INPUT SECTION
-st.markdown("<div style='text-align:right; direction:rtl;'>הכנס גובה (מטר או אבסולוטי)</div>", unsafe_allow_html=True)
-user_input = st.number_input("", value=6.4, min_value=0.0, step=0.01, label_visibility="collapsed")
+# Activity & Name Dropdowns
+st.markdown("<div style='text-align:right; direction:rtl; margin-bottom:5px; font-size:18px;'>בחר/י מטלה:</div>", unsafe_allow_html=True)
+selected_activity = st.selectbox("", ACTIVITIES, key="activity_select", label_visibility="collapsed")
 
-# LOGIC: Check Validity
-is_valid = False
-selected_height = 0.0
-above_sea_level = 0.0
+st.markdown("<div style='text-align:right; direction:rtl; margin-bottom:5px; font-size:18px; margin-top:15px;'>מי ביצע/ה?</div>", unsafe_allow_html=True)
+selected_name = st.selectbox("", NAMES, key="name_select", label_visibility="collapsed")
 
-# 1. Check Range
-if 0.0 <= user_input <= MAX_RELATIVE_HEIGHT:
-    selected_height = user_input
-    above_sea_level = SEA_LEVEL_ZERO + selected_height
-    is_valid = True
-elif SEA_LEVEL_ZERO <= user_input <= MAX_ABSOLUTE_HEIGHT:
-    selected_height = user_input - SEA_LEVEL_ZERO
-    above_sea_level = user_input
-    is_valid = True
-else:
-    # ERROR HANDLING: Just show message, do NOT stop app
-    if user_input > 0: # Don't show error on initial 0.0
-        st.error(f"⚠️ טווח לא חוקי. נא להזין בין 0-{MAX_RELATIVE_HEIGHT} או {SEA_LEVEL_ZERO}-{MAX_ABSOLUTE_HEIGHT}")
-    is_valid = False
+# --- SAVE BUTTON ---
+st.markdown("<br>", unsafe_allow_html=True)
 
-# IF VALID: Show Calculation, Graph, and Save Button
-if is_valid:
-    # --- Calculation ---
-    lower_step = round((selected_height // 0.5) * 0.5, 2)
-    upper_step = round(min(lower_step + 0.5, 8.5), 2)
-    lower_volume = HEIGHT_VOLUME[lower_step]
-    upper_volume = HEIGHT_VOLUME[upper_step]
+st.button(
+    "💾 שמור נתונים" if not st.session_state.is_saving else "⏳ שומר...", 
+    use_container_width=True, 
+    type="primary", 
+    on_click=trigger_save,
+    disabled=st.session_state.is_saving
+)
 
-    if upper_step == lower_step:
-        cumulative_volume = lower_volume
-    else:
-        fraction = (selected_height - lower_step) / 0.5
-        cumulative_volume = lower_volume + (upper_volume - lower_volume) * fraction
-
-    # Display Text Stats
-    st.markdown(
-        f"""
-        <div style="display:flex; gap:12px; align-items:flex-start; justify-content:space-between; direction:rtl; margin-top:10px;">
-          <div style="text-align:right;">
-            <strong>נפח מצטבר</strong><br><span style="font-size:1.2rem; color:#1f77b4;">{cumulative_volume:,.0f}</span> מ״ק
-          </div>
-          <div style="text-align:right;">
-            <strong>גובה מעל הים</strong><br>{above_sea_level:.2f} מ׳
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # --- THE GRAPH (Restored) ---
-    st.markdown("<br>", unsafe_allow_html=True)
+if st.session_state.is_saving:
+    tz = pytz.timezone('Asia/Jerusalem')
+    now = datetime.now(tz)
+    current_time = now.strftime("%Y-%m-%d %H:%M:%S")
+    today_str = now.strftime("%Y-%m-%d") 
     
-    # Prepare Data
-    points = [{"Height": h, "AbsHeight": h + SEA_LEVEL_ZERO, "Volume": v} for h, v in sorted(HEIGHT_VOLUME.items())]
+    day_index = int(now.strftime("%w"))
+    current_day = HEBREW_DAYS[day_index]
     
-    # Split into "Past" (Blue) and "Future" (Gray)
-    blue_points = [p for p in points if p["Height"] <= selected_height]
-    # Add current point to Blue
-    if not any(p["Height"] == selected_height for p in blue_points):
-        blue_points.append({"Height": selected_height, "AbsHeight": above_sea_level, "Volume": cumulative_volume})
-    blue_points = sorted(blue_points, key=lambda p: p["Height"])
-
-    gray_points = [{"Height": selected_height, "AbsHeight": above_sea_level, "Volume": cumulative_volume}]
-    gray_points.extend([p for p in points if p["Height"] > selected_height])
-    gray_points = sorted(gray_points, key=lambda p: p["Height"])
-
-    blue_df = pd.DataFrame(blue_points)
-    gray_df = pd.DataFrame(gray_points)
+    df_check = get_data_from_sheet()
+    already_reported = False
     
-    x_domain = [SEA_LEVEL_ZERO, SEA_LEVEL_ZERO + 8.5]
-
-    # Chart
-    blue_line = alt.Chart(blue_df).mark_line(color="#1f77b4", strokeWidth=3).encode(
-        x=alt.X("AbsHeight", title="גובה מעל פני הים", scale=alt.Scale(domain=x_domain, zero=False)),
-        y=alt.Y("Volume", title="נפח (מ״ק)"),
-    )
-    gray_line = alt.Chart(gray_df).mark_line(color="#d3d3d3", strokeDash=[5, 5]).encode(
-        x="AbsHeight", y="Volume"
-    )
-    # Add a big dot for the current point
-    current_point = pd.DataFrame([{"AbsHeight": above_sea_level, "Volume": cumulative_volume}])
-    dot = alt.Chart(current_point).mark_circle(size=100, color="red").encode(x="AbsHeight", y="Volume")
-
-    final_chart = (blue_line + gray_line + dot).properties(height=250)
-    st.altair_chart(final_chart, use_container_width=True)
-
-    # --- SAVE BUTTON (Explicit Action) ---
-    # Logic: Only save when this button is clicked
-    if st.button("💾 שמור נתונים", use_container_width=True, type="primary"):
-        tz = pytz.timezone('Asia/Jerusalem')
-        current_time = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+    if not df_check.empty and len(df_check.columns) >= 4:
+        timestamp_col = df_check.columns[0]
+        name_col = df_check.columns[2]
+        activity_col = df_check.columns[3]
         
-        if save_to_google_sheet(current_time, selected_height, above_sea_level, cumulative_volume):
-            st.success("✅ הנתונים נשמרו בהצלחה!")
-            st.cache_data.clear() # Refresh table
+        df_check['JustDate'] = df_check[timestamp_col].astype(str).str[:10]
+        
+        match = df_check[(df_check[name_col] == selected_name) & 
+                         (df_check[activity_col] == selected_activity) & 
+                         (df_check['JustDate'] == today_str)]
+        
+        if not match.empty:
+            already_reported = True
+
+    if already_reported:
+        # LOG THE LIAR TO SHEET 2
+        save_liar_to_google_sheet(current_time, current_day, selected_name, selected_activity)
+        
+        st.error("דיווחת כבר, כרמלה מלשינה 🤦‍♂️")
+        st.session_state.is_saving = False 
+    else:
+        if save_to_google_sheet(current_time, current_day, selected_name, selected_activity):
+            st.success(f"✅ כל הכבוד {selected_name} על ביצוע: {selected_activity}! נשמר בהצלחה.")
+            st.session_state.is_saving = False 
+            time.sleep(1) 
+            st.rerun() 
         else:
             st.error("❌ שגיאה בשמירה")
+            st.session_state.is_saving = False 
 
-# --- 5. HISTORY TABLE ---
+# --- 5. HISTORY TABLE & LEADERBOARD ---
 st.divider()
-st.markdown("<div style='text-align:right; direction:rtl; font-weight:bold;'>היסטוריית מדידות</div>", unsafe_allow_html=True)
+st.markdown("<h4 style='text-align:right; direction:rtl;'>📊 סטטיסטיקות והיסטוריה</h4>", unsafe_allow_html=True)
 
 df = get_data_from_sheet()
 
-if not df.empty:
+if not df.empty and len(df.columns) >= 4:
+    timestamp_col = df.columns[0]
+    name_col = df.columns[2]
+    activity_col = df.columns[3]
+    
+    filtered_df = df[df[activity_col] == selected_activity].copy()
+    
+    st.markdown("<div style='text-align:right; direction:rtl; font-weight:bold;'>סנן תקופת זמן:</div>", unsafe_allow_html=True)
+    time_filter = st.radio(
+        "", 
+        ["כל הזמן", "3 ימים אחרונים", "שבוע אחרון", "חודש אחרון"], 
+        horizontal=True, 
+        label_visibility="collapsed"
+    )
+    
+    if not filtered_df.empty:
+        filtered_df['Datetime'] = pd.to_datetime(filtered_df[timestamp_col], format="%Y-%m-%d %H:%M:%S", errors='coerce')
+        tz = pytz.timezone('Asia/Jerusalem')
+        now_time = datetime.now(tz).replace(tzinfo=None) 
+        
+        if time_filter == "3 ימים אחרונים":
+            cutoff = now_time - pd.Timedelta(days=3)
+            filtered_df = filtered_df[filtered_df['Datetime'] >= cutoff]
+        elif time_filter == "שבוע אחרון":
+            cutoff = now_time - pd.Timedelta(days=7)
+            filtered_df = filtered_df[filtered_df['Datetime'] >= cutoff]
+        elif time_filter == "חודש אחרון":
+            cutoff = now_time - pd.Timedelta(days=30)
+            filtered_df = filtered_df[filtered_df['Datetime'] >= cutoff]
+
+    if not filtered_df.empty:
+        counts = filtered_df[name_col].value_counts().reset_index()
+        counts.columns = ['שם', 'מספר פעמים']
+        
+        chart = alt.Chart(counts).mark_bar(cornerRadiusEnd=4).encode(
+            x=alt.X('מספר פעמים:Q', title='כמות הפעמים שבוצע', axis=alt.Axis(tickMinStep=1, format='d')),
+            y=alt.Y('שם:N', sort='-x', title=''),
+            color=alt.Color('שם:N', legend=None),
+            tooltip=['שם', 'מספר פעמים']
+        ).properties(
+            title=f'🏆 טבלת אלופים - {selected_activity} ({time_filter})',
+            height=300
+        )
+        st.altair_chart(chart, use_container_width=True)
+    else:
+        st.info(f"אין נתונים עבור המטלה '{selected_activity}' בטווח הזמן הנבחר ({time_filter}).")
+
     csv = df.to_csv(index=False).encode('utf-8')
     st.download_button(
         label="📥 הורד נתונים (CSV)",
         data=csv,
-        file_name='water_level_log.csv',
+        file_name='chores_log.csv',
         mime='text/csv',
     )
-    st.dataframe(df.tail(5).iloc[::-1], use_container_width=True)
+    
+    st.markdown("<div style='text-align:right; direction:rtl;'><strong>10 הביצועים האחרונים (כל המטלות):</strong></div>", unsafe_allow_html=True)
+    display_df = df.copy()
+    if 'Datetime' in display_df.columns:
+        display_df = display_df.drop(columns=['Datetime'])
+    st.dataframe(display_df.head(10), use_container_width=True) 
+
 else:
-    st.info("אין נתונים עדיין.")
+    st.info("אין נתונים או חסרות עמודות בטבלת הגוגל שיטס (נדרשות 4 עמודות).")
+
+# --- 6. THE LIARS LIST (WALL OF SHAME) ---
+st.divider()
+st.markdown("<div style='text-align:right; direction:rtl;'>", unsafe_allow_html=True)
+if st.toggle("🚨 הצג את רשימת השקרנים 🚨"):
+    st.markdown("<h4 style='color:red;'>🤥 רשימת השקרנים</h4>", unsafe_allow_html=True)
+    
+    liars_df = get_liars_from_sheet()
+    
+    if not liars_df.empty:
+        # Display the liars data
+        st.dataframe(liars_df, use_container_width=True)
+    else:
+        st.success("כולם צדיקים! אין שקרנים בינתיים. 😇")
+st.markdown("</div>", unsafe_allow_html=True)
+
+# Footer
 st.markdown(
-    "<div style='text-align:right; direction:rtl; font-size:0.75rem; margin-top:0.05rem;'>"
-    "מופעל על ידי יאיר ועמית כהנוביץ. צאצאי משפחת כהנוביץ, ממיסדי מושב בית שערים"
+    "<div style='text-align:right; direction:rtl; font-size:0.75rem; margin-top:2rem; color:gray;'>"
+    "מופעל על ידי נאור סוכר בעמ"
     "</div>",
     unsafe_allow_html=True,
-)   
+)
