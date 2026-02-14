@@ -44,7 +44,7 @@ def get_gsheet_client():
 def save_to_google_sheet(timestamp, level, abs_level, volume):
     try:
         client = get_gsheet_client()
-        sheet = client.open("WaterLevelDB").sheet1
+        sheet = client.open("piniti").sheet1
         sheet.append_row([str(timestamp), level, abs_level, volume])
         return True
     except Exception as e:
