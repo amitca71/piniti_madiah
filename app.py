@@ -11,50 +11,11 @@ import time
 #    st.write("Logged in as:", user.email)
 # --- 1. SETUP & AUTHENTICATION ---
 DEV_MODE = st.secrets.get("DEV_MODE", False)
-def get_user_info():
-    """
-    Returns a tuple: (email, name)
-    - email: always the unique identifier for the user
-    - name: optional, may be None
-    Works on Streamlit Community Cloud and local dev.
-    """
-    if DEV_MODE:
-        return "dev_user@gmail.com", "Dev User"
+user_email = "dev@gmail.com"
+if not DEV_MODE and "email" in st.user:
+    user_email = st.user.email
 
-    # Check if st.user exists and user is logged in
-    if hasattr(st, "user") and getattr(st.user, "is_logged_in", False):
-        email = getattr(st.user, "email", None)
-        name = getattr(st.user, "name", None)
-        return email, name
-
-    # Older API fallback
-    if hasattr(st, "experimental_user") and st.experimental_user:
-        email = getattr(st.experimental_user, "email", None)
-        name = getattr(st.experimental_user, "name", None)
-        return email, name
-
-    # User info not available yet
-    return None, None
-
-# ------------------------------
-# Get user
-# ------------------------------
-user_email, user_name = get_user_info()
-
-# ------------------------------
-# Guard against empty login
-# ------------------------------
-if not user_email:
-    st.warning("User info not available yet. Please log in or refresh the page.")
-    st.stop()  # stops the app from running further until user info is available
-
-# ------------------------------
-# Use the user info safely
-# ------------------------------
-display_name = user_name or user_email.split("@")[0]
-
-st.success(f"Welcome, {display_name}!")
-st.write(f"Email: {user_email}")
+st.write(f"Logged in as: {user_email}")
 
 
 # --- 2. GOOGLE SHEETS CONNECTION ---
