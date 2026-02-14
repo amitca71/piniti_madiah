@@ -47,7 +47,6 @@ def get_gsheet_client():
 def save_to_google_sheet(timestamp, day_of_week, name, activity):
     try:
         client = get_gsheet_client()
-        # .sheet1 always targets the first tab
         sheet = client.open("piniti").sheet1
         sheet.insert_row([str(timestamp), day_of_week, name, activity], index=2, value_input_option='USER_ENTERED')
         return True
@@ -55,16 +54,13 @@ def save_to_google_sheet(timestamp, day_of_week, name, activity):
         st.error(f"שגיאה בשמירה: {e}")
         return False
 
-# NEW FUNCTION: Save to the Liars Sheet (Tab 2)
 def save_liar_to_google_sheet(timestamp, day_of_week, name, activity):
     try:
         client = get_gsheet_client()
-        # .get_worksheet(1) targets the SECOND tab from the left, regardless of its name
         sheet = client.open("piniti").get_worksheet(1)
         sheet.insert_row([str(timestamp), day_of_week, name, activity], index=2, value_input_option='USER_ENTERED')
         return True
     except Exception:
-        # We don't want a liar-saving error to crash the main app, so we pass quietly
         return False
 
 def get_data_from_sheet():
@@ -76,7 +72,6 @@ def get_data_from_sheet():
     except Exception:
         return pd.DataFrame()
 
-# NEW FUNCTION: Read from the Liars Sheet (Tab 2)
 def get_liars_from_sheet():
     try:
         client = get_gsheet_client()
@@ -87,7 +82,8 @@ def get_liars_from_sheet():
         return pd.DataFrame()
 
 # --- 3. DATA CONSTANTS & STATE ---
-NAMES = ["YAFA", "SHIFSHUF", "LAKERD", "GAMAD", "GAMAL"]
+# Added "TEST" to the list of names
+NAMES = ["TEST", "GAMAD","YAFA", "SHIFSHUF", "LAKERD", "GAMAL"]
 ACTIVITIES = ["פינוי מדיח"] 
 HEBREW_DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"]
 
@@ -133,29 +129,34 @@ if st.session_state.is_saving:
     df_check = get_data_from_sheet()
     already_reported = False
     
-    if not df_check.empty and len(df_check.columns) >= 4:
-        timestamp_col = df_check.columns[0]
-        name_col = df_check.columns[2]
-        activity_col = df_check.columns[3]
-        
-        df_check['JustDate'] = df_check[timestamp_col].astype(str).str[:10]
-        
-        match = df_check[(df_check[name_col] == selected_name) & 
-                         (df_check[activity_col] == selected_activity) & 
-                         (df_check['JustDate'] == today_str)]
-        
-        if not match.empty:
-            already_reported = True
+    # Validation Check: Only run the check if the user is NOT "TEST"
+    if selected_name != "TEST":
+        if not df_check.empty and len(df_check.columns) >= 4:
+            timestamp_col = df_check.columns[0]
+            name_col = df_check.columns[2]
+            activity_col = df_check.columns[3]
+            
+            df_check['JustDate'] = df_check[timestamp_col].astype(str).str[:10]
+            
+            match = df_check[(df_check[name_col] == selected_name) & 
+                             (df_check[activity_col] == selected_activity) & 
+                             (df_check['JustDate'] == today_str)]
+            
+            if not match.empty:
+                already_reported = True
 
     if already_reported:
-        # LOG THE LIAR TO SHEET 2
         save_liar_to_google_sheet(current_time, current_day, selected_name, selected_activity)
-        
         st.error("דיווחת כבר, כרמלה מלשינה 🤦‍♂️")
         st.session_state.is_saving = False 
     else:
         if save_to_google_sheet(current_time, current_day, selected_name, selected_activity):
-            st.success(f"✅ כל הכבוד {selected_name} על ביצוע: {selected_activity}! נשמר בהצלחה.")
+            # Special success message for the test user
+            if selected_name == "TEST":
+                st.success("✅ בדיקת מערכת עברה בהצלחה!")
+            else:
+                st.success(f"✅ כל הכבוד {selected_name} על ביצוע: {selected_activity}! נשמר בהצלחה.")
+            
             st.session_state.is_saving = False 
             time.sleep(1) 
             st.rerun() 
@@ -174,7 +175,10 @@ if not df.empty and len(df.columns) >= 4:
     name_col = df.columns[2]
     activity_col = df.columns[3]
     
-    filtered_df = df[df[activity_col] == selected_activity].copy()
+    # We might want to filter out "TEST" from the graph so it doesn't ruin the actual leaderboard
+    real_data_df = df[df[name_col] != "TEST"].copy()
+    
+    filtered_df = real_data_df[real_data_df[activity_col] == selected_activity].copy()
     
     st.markdown("<div style='text-align:right; direction:rtl; font-weight:bold;'>סנן תקופת זמן:</div>", unsafe_allow_html=True)
     time_filter = st.radio(
@@ -214,8 +218,15 @@ if not df.empty and len(df.columns) >= 4:
         )
         st.altair_chart(chart, use_container_width=True)
     else:
-        st.info(f"אין נתונים עבור המטלה '{selected_activity}' בטווח הזמן הנבחר ({time_filter}).")
+        st.info(f"אין נתונים אמיתיים עבור המטלה '{selected_activity}' בטווח הזמן הנבחר ({time_filter}).")
 
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 הורד נתונים (CSV)",
+        data=csv,
+        file_name='chores_log.csv',
+        mime='text/csv',
+    )
     
     st.markdown("<div style='text-align:right; direction:rtl;'><strong>10 הביצועים האחרונים (כל המטלות):</strong></div>", unsafe_allow_html=True)
     display_df = df.copy()
@@ -235,7 +246,6 @@ if st.toggle("🚨 הצג את רשימת השקרנים 🚨"):
     liars_df = get_liars_from_sheet()
     
     if not liars_df.empty:
-        # Display the liars data
         st.dataframe(liars_df, use_container_width=True)
     else:
         st.success("כולם צדיקים! אין שקרנים בינתיים. 😇")
@@ -247,11 +257,4 @@ st.markdown(
     "מופעל על ידי נאור סוכר בעמ"
     "</div>",
     unsafe_allow_html=True,
-)
-csv = df.to_csv(index=False).encode('utf-8')
-st.download_button(
-    label="📥 הורד נתונים (CSV)",
-    data=csv,
-    file_name='chores_log.csv',
-    mime='text/csv',
 )
