@@ -216,13 +216,6 @@ if not df.empty and len(df.columns) >= 4:
     else:
         st.info(f"אין נתונים עבור המטלה '{selected_activity}' בטווח הזמן הנבחר ({time_filter}).")
 
-    csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 הורד נתונים (CSV)",
-        data=csv,
-        file_name='chores_log.csv',
-        mime='text/csv',
-    )
     
     st.markdown("<div style='text-align:right; direction:rtl;'><strong>10 הביצועים האחרונים (כל המטלות):</strong></div>", unsafe_allow_html=True)
     display_df = df.copy()
@@ -254,4 +247,11 @@ st.markdown(
     "מופעל על ידי נאור סוכר בעמ"
     "</div>",
     unsafe_allow_html=True,
+)
+csv = df.to_csv(index=False).encode('utf-8')
+st.download_button(
+    label="📥 הורד נתונים (CSV)",
+    data=csv,
+    file_name='chores_log.csv',
+    mime='text/csv',
 )
