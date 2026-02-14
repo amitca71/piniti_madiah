@@ -54,7 +54,7 @@ def save_to_google_sheet(timestamp, level, abs_level, volume):
 def get_data_from_sheet():
     try:
         client = get_gsheet_client()
-        sheet = client.open("WaterLevelDB").sheet1
+        sheet = client.open("piniti").sheet1
         data = sheet.get_all_records()
         return pd.DataFrame(data)
     except Exception:
