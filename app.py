@@ -82,10 +82,12 @@ def get_liars_from_sheet():
         return pd.DataFrame()
 
 # --- 3. DATA CONSTANTS & STATE ---
-# Added "TEST" to the list of names
-NAMES = ["TEST", "GAMAD","YAFA", "SHIFSHUF", "LAKERD", "GAMAL"]
+NAMES = ["YAFA", "SHIFSHUF", "LAKERD", "GAMAD", "GAMAL", "TEST"]
 ACTIVITIES = ["פינוי מדיח"] 
 HEBREW_DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"]
+
+# The placeholder text that forces a selection
+PLACEHOLDER_NAME = "--- בחר/י שם ---"
 
 if 'is_saving' not in st.session_state:
     st.session_state.is_saving = False
@@ -99,12 +101,14 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Activity & Name Dropdowns
+# Activity Dropdown
 st.markdown("<div style='text-align:right; direction:rtl; margin-bottom:5px; font-size:18px;'>בחר/י מטלה:</div>", unsafe_allow_html=True)
 selected_activity = st.selectbox("", ACTIVITIES, key="activity_select", label_visibility="collapsed")
 
+# Name Dropdown (Now includes the placeholder at the top)
 st.markdown("<div style='text-align:right; direction:rtl; margin-bottom:5px; font-size:18px; margin-top:15px;'>מי ביצע/ה?</div>", unsafe_allow_html=True)
-selected_name = st.selectbox("", NAMES, key="name_select", label_visibility="collapsed")
+name_options = [PLACEHOLDER_NAME] + NAMES
+selected_name = st.selectbox("", name_options, key="name_select", label_visibility="collapsed")
 
 # --- SAVE BUTTON ---
 st.markdown("<br>", unsafe_allow_html=True)
@@ -118,51 +122,56 @@ st.button(
 )
 
 if st.session_state.is_saving:
-    tz = pytz.timezone('Asia/Jerusalem')
-    now = datetime.now(tz)
-    current_time = now.strftime("%Y-%m-%d %H:%M:%S")
-    today_str = now.strftime("%Y-%m-%d") 
+    # 1. NEW VALIDATION: Check if they left the dropdown on the placeholder
+    if selected_name == PLACEHOLDER_NAME:
+        st.error("⚠️ לא בחרת שם! אנא בחר/י מי ביצע/ה את המטלה מתוך הרשימה.")
+        st.session_state.is_saving = False # Unlock the button so they can try again
     
-    day_index = int(now.strftime("%w"))
-    current_day = HEBREW_DAYS[day_index]
-    
-    df_check = get_data_from_sheet()
-    already_reported = False
-    
-    # Validation Check: Only run the check if the user is NOT "TEST"
-    if selected_name != "TEST":
-        if not df_check.empty and len(df_check.columns) >= 4:
-            timestamp_col = df_check.columns[0]
-            name_col = df_check.columns[2]
-            activity_col = df_check.columns[3]
-            
-            df_check['JustDate'] = df_check[timestamp_col].astype(str).str[:10]
-            
-            match = df_check[(df_check[name_col] == selected_name) & 
-                             (df_check[activity_col] == selected_activity) & 
-                             (df_check['JustDate'] == today_str)]
-            
-            if not match.empty:
-                already_reported = True
-
-    if already_reported:
-        save_liar_to_google_sheet(current_time, current_day, selected_name, selected_activity)
-        st.error("דיווחת כבר, כרמלה מלשינה 🤦‍♂️")
-        st.session_state.is_saving = False 
+    # 2. If a valid name IS selected, proceed with saving logic
     else:
-        if save_to_google_sheet(current_time, current_day, selected_name, selected_activity):
-            # Special success message for the test user
-            if selected_name == "TEST":
-                st.success("✅ בדיקת מערכת עברה בהצלחה!")
-            else:
-                st.success(f"✅ כל הכבוד {selected_name} על ביצוע: {selected_activity}! נשמר בהצלחה.")
-            
+        tz = pytz.timezone('Asia/Jerusalem')
+        now = datetime.now(tz)
+        current_time = now.strftime("%Y-%m-%d %H:%M:%S")
+        today_str = now.strftime("%Y-%m-%d") 
+        
+        day_index = int(now.strftime("%w"))
+        current_day = HEBREW_DAYS[day_index]
+        
+        df_check = get_data_from_sheet()
+        already_reported = False
+        
+        if selected_name != "TEST":
+            if not df_check.empty and len(df_check.columns) >= 4:
+                timestamp_col = df_check.columns[0]
+                name_col = df_check.columns[2]
+                activity_col = df_check.columns[3]
+                
+                df_check['JustDate'] = df_check[timestamp_col].astype(str).str[:10]
+                
+                match = df_check[(df_check[name_col] == selected_name) & 
+                                 (df_check[activity_col] == selected_activity) & 
+                                 (df_check['JustDate'] == today_str)]
+                
+                if not match.empty:
+                    already_reported = True
+
+        if already_reported:
+            save_liar_to_google_sheet(current_time, current_day, selected_name, selected_activity)
+            st.error("דיווחת כבר, כרמלה מלשינה 🤦‍♂️")
             st.session_state.is_saving = False 
-            time.sleep(1) 
-            st.rerun() 
         else:
-            st.error("❌ שגיאה בשמירה")
-            st.session_state.is_saving = False 
+            if save_to_google_sheet(current_time, current_day, selected_name, selected_activity):
+                if selected_name == "TEST":
+                    st.success("✅ בדיקת מערכת עברה בהצלחה!")
+                else:
+                    st.success(f"✅ כל הכבוד {selected_name} על ביצוע: {selected_activity}! נשמר בהצלחה.")
+                
+                st.session_state.is_saving = False 
+                time.sleep(1) 
+                st.rerun() 
+            else:
+                st.error("❌ שגיאה בשמירה")
+                st.session_state.is_saving = False 
 
 # --- 5. HISTORY TABLE & LEADERBOARD ---
 st.divider()
@@ -175,9 +184,7 @@ if not df.empty and len(df.columns) >= 4:
     name_col = df.columns[2]
     activity_col = df.columns[3]
     
-    # We might want to filter out "TEST" from the graph so it doesn't ruin the actual leaderboard
     real_data_df = df[df[name_col] != "TEST"].copy()
-    
     filtered_df = real_data_df[real_data_df[activity_col] == selected_activity].copy()
     
     st.markdown("<div style='text-align:right; direction:rtl; font-weight:bold;'>סנן תקופת זמן:</div>", unsafe_allow_html=True)
@@ -207,8 +214,15 @@ if not df.empty and len(df.columns) >= 4:
         counts = filtered_df[name_col].value_counts().reset_index()
         counts.columns = ['שם', 'מספר פעמים']
         
+        # --- PREVENT DUPLICATE TICKS FOR LOW NUMBERS ---
+        max_count = int(counts['מספר פעמים'].max())
+        if max_count < 15:
+            x_axis = alt.Axis(values=list(range(0, max_count + 1)), format='d')
+        else:
+            x_axis = alt.Axis(tickMinStep=1, format='d')
+        
         chart = alt.Chart(counts).mark_bar(cornerRadiusEnd=4).encode(
-            x=alt.X('מספר פעמים:Q', title='כמות הפעמים שבוצע', axis=alt.Axis(tickMinStep=1, format='d')),
+            x=alt.X('מספר פעמים:Q', title='כמות הפעמים שבוצע', axis=x_axis),
             y=alt.Y('שם:N', sort='-x', title=''),
             color=alt.Color('שם:N', legend=None),
             tooltip=['שם', 'מספר פעמים']
@@ -244,17 +258,3 @@ if st.toggle("🚨 הצג את רשימת השקרנים 🚨"):
     st.markdown("<h4 style='color:red;'>🤥 רשימת השקרנים</h4>", unsafe_allow_html=True)
     
     liars_df = get_liars_from_sheet()
-    
-    if not liars_df.empty:
-        st.dataframe(liars_df, use_container_width=True)
-    else:
-        st.success("כולם צדיקים! אין שקרנים בינתיים. 😇")
-st.markdown("</div>", unsafe_allow_html=True)
-
-# Footer
-st.markdown(
-    "<div style='text-align:right; direction:rtl; font-size:0.75rem; margin-top:2rem; color:gray;'>"
-    "מופעל על ידי נאור סוכר בעמ"
-    "</div>",
-    unsafe_allow_html=True,
-)
