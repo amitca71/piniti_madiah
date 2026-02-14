@@ -233,7 +233,7 @@ else:
 # --- 6. THE LIARS LIST (WALL OF SHAME) ---
 st.divider()
 st.markdown("<div style='text-align:right; direction:rtl;'>", unsafe_allow_html=True)
-if st.toggle("🚨 הצג את רשימת השקרנים 🚨"):
+if st.toggle("הרשימה של כרמלה 🚨"):
     st.markdown("<h4 style='color:red;'>🤥 רשימת השקרנים</h4>", unsafe_allow_html=True)
     
     liars_df = get_liars_from_sheet()
