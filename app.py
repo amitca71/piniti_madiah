@@ -15,7 +15,7 @@ DEV_MODE = st.secrets.get("DEV_MODE", False)
 if DEV_MODE:
     user_email = "dev@gmail.com"
 else:
-    user_email = st.user.email
+    user_email = st.user
 
 st.write(f"Logged in as: {user_email}")
 
