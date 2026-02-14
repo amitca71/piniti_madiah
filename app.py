@@ -12,7 +12,7 @@ import time
 # --- 1. SETUP & AUTHENTICATION ---
 DEV_MODE = st.secrets.get("DEV_MODE", False)
 user_email = "dev@gmail.com"
-if not DEV_MODE and "email in "st.user":
+if not DEV_MODE and "email" in st.user:
     user_email = st.user.email
 
 st.write(f"Logged in as: {user_email}")
