@@ -6,9 +6,9 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import pytz
 import time
-user=st.experimental_user
-if user:
-    st.write("Logged in as:", user.email)
+#user=st.experimental_user
+#if user:
+#    st.write("Logged in as:", user.email)
 # --- 1. SETUP & AUTHENTICATION ---
 def check_password():
     if "general" not in st.secrets:
