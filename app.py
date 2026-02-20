@@ -244,6 +244,9 @@ if st.toggle("הרשימה של חסמן וכרמלה 🧙‍♀️"):
 st.markdown("</div>", unsafe_allow_html=True)
 if st.toggle("הפינה של אדוארד 👨‍🍳🥩"):
     st.markdown("<h4 style='color:red;'>מי רוצה רוסטביף משוגע? 🍖 </h4>", unsafe_allow_html=True)
+
+if st.toggle("👮‍♂️ חדשות נאור סוכר"):
+    st.markdown("<h4 style='color:red;'>ממליץ לכם בחברות, להשאיר את הבית מסודר ולהתחיל לפנות מדיח 🍖 </h4>", unsafe_allow_html=True)
 csv = df.to_csv(index=False).encode('utf-8')
 st.download_button(
     label="📥 הורד נתונים (CSV)",
