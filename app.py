@@ -144,7 +144,7 @@ if st.session_state.is_saving:
 
         if already_reported:
             save_liar_to_google_sheet(current_time, current_day, selected_name, selected_activity)
-            st.error("דיווחת כבר, כרמלה מלשינה 🤦‍♂️")
+            st.error("דיווחת כבר, כרמלה מלשינה 🗣️")
             st.session_state.is_saving = False 
         else:
             if save_to_google_sheet(current_time, current_day, selected_name, selected_activity):
