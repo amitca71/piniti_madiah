@@ -70,7 +70,7 @@ def get_liars_from_sheet():
 
 # --- 3. DATA CONSTANTS & STATE ---
 NAMES = ["YAFA", "SHIFSHUF", "LAKERD", "GAMAD", "GAMAL", "TEST"]
-ACTIVITIES = ["פינוי מדיח"] 
+ACTIVITIES = ["ניקוי חצר", "פינוי מדיח"] 
 HEBREW_DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"]
 
 # The placeholder text that forces a selection
