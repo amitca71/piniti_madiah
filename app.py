@@ -70,7 +70,7 @@ def get_liars_from_sheet():
 
 # --- 3. DATA CONSTANTS & STATE ---
 NAMES = ["YAFA", "SHIFSHUF", "LAKERD", "GAMAD", "GAMAL", "TEST"]
-ACTIVITIES = ["ניקוי חצר", "פינוי מדיח"] 
+ACTIVITIES = [ "ניקוי חצר", "פינוי מדיח"] 
 HEBREW_DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"]
 
 # The placeholder text that forces a selection
@@ -90,7 +90,7 @@ st.markdown(
 
 # Activity Dropdown
 st.markdown("<div style='text-align:right; direction:rtl; margin-bottom:5px; font-size:18px;'>בחר/י מטלה:</div>", unsafe_allow_html=True)
-selected_activity = st.selectbox(ACTIVITIES[1], ACTIVITIES, key="activity_select", label_visibility="collapsed")
+selected_activity = st.selectbox("", ACTIVITIES, index=0,key="activity_select", label_visibility="collapsed")
 
 # Name Dropdown (Now includes the placeholder at the top)
 st.markdown("<div style='text-align:right; direction:rtl; margin-bottom:5px; font-size:18px; margin-top:15px;'>מי ביצע/ה?</div>", unsafe_allow_html=True)
