@@ -15,7 +15,7 @@ user_email = "dev@gmail.com"
 if not DEV_MODE and "email" in st.user:
     user_email = st.user.email
 
-st.write(f"Logged in as: {user_email}")
+#st.write(f"Logged in as: {user_email}")
 
 
 # --- 2. GOOGLE SHEETS CONNECTION ---
@@ -233,8 +233,8 @@ else:
 # --- 6. THE LIARS LIST (WALL OF SHAME) ---
 st.divider()
 st.markdown("<div style='text-align:right; direction:rtl;'>", unsafe_allow_html=True)
-if st.toggle("הרשימה של כרמלה 🚨"):
-    st.markdown("<h4 style='color:red;'>🤥 רשימת השקרנים</h4>", unsafe_allow_html=True)
+if st.toggle("הרשימה של כרמלה 🧙‍♀️"):
+    st.markdown("<h4 style='color:red;'>🤥 השקרנים של כרמלה </h4>", unsafe_allow_html=True)
     
     liars_df = get_liars_from_sheet()
     if not liars_df.empty:
